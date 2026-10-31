@@ -210,6 +210,7 @@ Server variables go in the **Vercel project**; `LBV_EMAIL`/`LBV_PASSWORD` live o
 | `DESCOPE_PROJECT_ID` | Descope project id — enables the OAuth path (not a secret) |
 | `LBV_ALLOWED_EMAIL` | **The OAuth security boundary**: only a token with this email claim is accepted (fail-closed) |
 | `LBV_ALLOWED_SUBJECT` | Same boundary keyed on the Descope user id (`U…`) in `sub` — covers tokens without an email claim; either match suffices |
+| `DESCOPE_MCP_SERVER_ID` | Descope MCP Server id (`MS…`). Descope hosts Dynamic Client Registration on the MCP Server's own authorization server; set it so Claude connectors can self-register (not a secret) |
 | `DESCOPE_BASE_URL` | Optional Descope regional base URL (default `https://api.descope.com`) |
 | `DESCOPE_MANAGEMENT_KEY` | Local `descope` CLI only — **never** on Vercel, never committed |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Vercel KV — account connections, one-time connect links, cookie jars. **Required in production**. Local `next dev` without KV uses `.lbv-dev-store.json`. |

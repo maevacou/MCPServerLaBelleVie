@@ -23,6 +23,7 @@ const ENV_KEYS = [
   'LBV_API_TOKEN',
   'DESCOPE_PROJECT_ID',
   'DESCOPE_BASE_URL',
+  'DESCOPE_MCP_SERVER_ID',
   'LBV_ALLOWED_EMAIL',
   'LBV_ALLOWED_SUBJECT',
 ] as const;
@@ -37,6 +38,7 @@ function configureEnv(): void {
   process.env.LBV_ALLOWED_EMAIL = 'allowed@example.com';
   delete process.env.LBV_ALLOWED_SUBJECT;
   delete process.env.DESCOPE_BASE_URL;
+  delete process.env.DESCOPE_MCP_SERVER_ID;
 }
 
 function grantSession(claims: Record<string, unknown>): void {
@@ -198,8 +200,22 @@ describe('descopeIssuerUrl', () => {
     process.env.DESCOPE_BASE_URL = 'https://api.euc1.descope.com';
     expect(descopeIssuerUrl()).toBe('https://api.euc1.descope.com/v1/apps/P2testProjectId');
   });
+  it('targets the MCP Server authorization server when DESCOPE_MCP_SERVER_ID is set', () => {
+    process.env.DESCOPE_MCP_SERVER_ID = 'MS2testServerId';
+    expect(descopeIssuerUrl()).toBe(
+      'https://api.descope.com/v1/apps/agentic/P2testProjectId/MS2testServerId',
+    );
+  });
+  it('combines DESCOPE_MCP_SERVER_ID with DESCOPE_BASE_URL', () => {
+    process.env.DESCOPE_BASE_URL = 'https://api.euc1.descope.com';
+    process.env.DESCOPE_MCP_SERVER_ID = 'MS2testServerId';
+    expect(descopeIssuerUrl()).toBe(
+      'https://api.euc1.descope.com/v1/apps/agentic/P2testProjectId/MS2testServerId',
+    );
+  });
   it('is undefined without a project id', () => {
     delete process.env.DESCOPE_PROJECT_ID;
+    process.env.DESCOPE_MCP_SERVER_ID = 'MS2testServerId';
     expect(descopeIssuerUrl()).toBeUndefined();
   });
 });

@@ -19,11 +19,22 @@ import type { AuthInfo } from '@modelcontextprotocol/server';
 const GROCERIES_SCOPE = 'groceries';
 const DEFAULT_DESCOPE_BASE_URL = 'https://api.descope.com';
 
-/** Issuer URL for RFC 9728 protected-resource metadata; undefined when OAuth is not configured. */
+/**
+ * Issuer URL for RFC 9728 protected-resource metadata; undefined when OAuth is not configured.
+ *
+ * With `DESCOPE_MCP_SERVER_ID` set, points at that Descope MCP Server's own
+ * authorization server (`/v1/apps/agentic/<project>/<server>`), which is where
+ * Descope now hosts Dynamic Client Registration. Without it, falls back to the
+ * project-level issuer. Token validation accepts both (same project JWKs).
+ */
 export function descopeIssuerUrl(): string | undefined {
   const projectId = process.env.DESCOPE_PROJECT_ID;
   const base = process.env.DESCOPE_BASE_URL || DEFAULT_DESCOPE_BASE_URL;
-  return projectId ? `${base}/v1/apps/${projectId}` : undefined;
+  if (!projectId) return undefined;
+  const mcpServerId = process.env.DESCOPE_MCP_SERVER_ID?.trim();
+  return mcpServerId
+    ? `${base}/v1/apps/agentic/${projectId}/${mcpServerId}`
+    : `${base}/v1/apps/${projectId}`;
 }
 
 /** True when the OAuth path is fully configured (project + at least one allowlist key). */
