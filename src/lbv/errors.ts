@@ -46,6 +46,11 @@ export function extractApiError(body: unknown): string | undefined {
 }
 
 function describeBody(body: unknown): string {
+  // An HTML error page (nginx 429/502…) says all it needs in its <title>.
+  if (typeof body === 'string' && /<html[\s>]/i.test(body)) {
+    const title = /<title>([^<]*)<\/title>/i.exec(body)?.[1]?.trim();
+    return title || 'HTML error page';
+  }
   const msg = extractApiError(body);
   if (msg) return msg;
   try {

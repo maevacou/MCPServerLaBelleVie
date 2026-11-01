@@ -274,3 +274,71 @@ describe('ensureLoggedIn', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe('LbvHttp rate limiting (429)', () => {
+  const nginx429 =
+    '<html>\r\n<head><title>429 Too Many Requests</title></head>\r\n<body><center><h1>429 Too Many Requests</h1></center></body>\r\n</html>';
+
+  it('waits and retries a 429 until the request goes through', async () => {
+    const calls: RecordedCall[] = [];
+    const waits: number[] = [];
+    const http = new LbvHttp({
+      fetchImpl: makeRecordingFetch(calls, (_m, _p, hit) =>
+        hit <= 2 ? new Response(nginx429, { status: 429 }) : new Response('{"ok":true}', { status: 200 }),
+      ) as typeof fetch,
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    const result = await http.postJson('/api/panier', { product_id: 1, quantity: 1 });
+    expect(result).toEqual({ ok: true });
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(3);
+    expect(calls.every((c) => c.body === 'product_id=1&quantity=1')).toBe(true);
+    expect(waits).toHaveLength(2);
+    expect(waits[1]).toBeGreaterThan(waits[0]);
+  });
+
+  it('honours Retry-After (in seconds, capped at 8 s)', async () => {
+    const waits: number[] = [];
+    const http = new LbvHttp({
+      fetchImpl: makeRecordingFetch([], (_m, _p, hit) =>
+        hit === 1
+          ? new Response(nginx429, { status: 429, headers: { 'retry-after': '2' } })
+          : hit === 2
+            ? new Response(nginx429, { status: 429, headers: { 'retry-after': '120' } })
+            : new Response('{}', { status: 200 }),
+      ) as typeof fetch,
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    await http.getJson('/api/panier');
+    expect(waits).toEqual([2000, 8000]);
+  });
+
+  it('gives up after the configured retries with a readable error', async () => {
+    const calls: RecordedCall[] = [];
+    const http = new LbvHttp({
+      fetchImpl: makeRecordingFetch(calls, () => new Response(nginx429, { status: 429 })) as typeof fetch,
+      rateLimitRetries: 2,
+      sleep: async () => undefined,
+    });
+    const err = await http.postJson('/api/panier', {}).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(LbvApiError);
+    expect((err as LbvApiError).status).toBe(429);
+    expect((err as LbvApiError).message).toBe('La Belle Vie API 429 on /api/panier: 429 Too Many Requests');
+    expect(calls).toHaveLength(3);
+  });
+
+  it('does not retry other client errors', async () => {
+    const calls: RecordedCall[] = [];
+    const http = new LbvHttp({
+      fetchImpl: makeRecordingFetch(calls, () => new Response('{"error":"bad"}', { status: 422 })) as typeof fetch,
+      sleep: async () => {
+        throw new Error('must not sleep');
+      },
+    });
+    await expect(http.postJson('/api/panier', {})).rejects.toBeInstanceOf(LbvApiError);
+    expect(calls).toHaveLength(1);
+  });
+});

@@ -29,6 +29,11 @@ async function runTool(
   } catch (err) {
     if (err instanceof LbvNotAuthenticatedError) return notConnected();
     if (err instanceof LbvAuthError) return fail(`Login failed: ${err.message}`);
+    if (err instanceof LbvApiError && err.status === 429) {
+      return fail(
+        'Rate limited by La Belle Vie (HTTP 429): too many requests in a short time, even after retrying. Wait a few seconds, then retry the same call.',
+      );
+    }
     if (err instanceof LbvApiError) return fail(`La Belle Vie API error (${err.status}): ${err.message}`);
     return fail(err instanceof Error ? err.message : String(err));
   }

@@ -17,6 +17,13 @@ export interface LbvHttpOptions {
   jar?: CookieJar;
   /** Injectable fetch, for tests. Defaults to the global fetch. */
   fetchImpl?: typeof fetch;
+  /**
+   * How many times a request answered 429 (rate limited) or 503 is retried
+   * before the response is returned as-is. Default 3.
+   */
+  rateLimitRetries?: number;
+  /** Wait implementation, injectable so tests do not actually sleep. */
+  sleep?: (ms: number) => Promise<void>;
   /** Credentials used for the initial login and for auto re-login on 4xx. */
   credentials?: Credentials;
   /**
@@ -40,6 +47,18 @@ interface RequestOptions {
   xhr?: boolean;
   /** Internal: prevents infinite auto re-login loops. */
   _isRetry?: boolean;
+}
+
+/** 429 Too Many Requests and 503 Service Unavailable: transient, request not processed. */
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 503;
+}
+
+/** Honour Retry-After (seconds, capped at 8 s), else back off 0.8 s, 1.6 s, 3.2 s… with jitter. */
+export function retryDelayMs(res: Response, attempt: number): number {
+  const retryAfter = Number(res.headers.get('retry-after'));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.min(retryAfter, 8) * 1000;
+  return 800 * 2 ** attempt + Math.floor(Math.random() * 250);
 }
 
 /** A 3xx is how this site answers a logged-out request on most endpoints. */
@@ -80,6 +99,8 @@ export function saltCsrf(tokens: { csrfname: string; csrfvalue: string }): {
 export class LbvHttp {
   readonly jar: CookieJar;
   private readonly fetchImpl: typeof fetch;
+  private readonly rateLimitRetries: number;
+  private readonly sleep: (ms: number) => Promise<void>;
   private readonly baseUrl: string;
   private credentials?: Credentials;
   private loggedIn = false;
@@ -87,6 +108,8 @@ export class LbvHttp {
   constructor(opts: LbvHttpOptions = {}) {
     this.jar = opts.jar ?? new CookieJar();
     this.fetchImpl = opts.fetchImpl ?? fetch;
+    this.rateLimitRetries = opts.rateLimitRetries ?? 3;
+    this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.baseUrl = opts.baseUrl ?? BASE_URL;
     this.credentials = opts.credentials;
     this.loggedIn = opts.assumeLoggedIn ?? false;
@@ -151,9 +174,18 @@ export class LbvHttp {
       headers.set('content-type', 'application/json; charset=UTF-8');
     }
 
-    await this.applyCookies(url, headers);
-    const res = await this.fetchImpl(url, { method, headers, body, redirect: 'manual' });
-    await this.storeCookies(url, res);
+    // La Belle Vie's nginx rate-limits bursts (notably POST /api/panier when a
+    // basket is filled item by item) with a 429 that means "not processed", so
+    // the same request is safe to send again after a pause.
+    let res: Response;
+    for (let attempt = 0; ; attempt++) {
+      await this.applyCookies(url, headers);
+      res = await this.fetchImpl(url, { method, headers, body, redirect: 'manual' });
+      await this.storeCookies(url, res);
+      if (!isRetryableStatus(res.status) || attempt >= this.rateLimitRetries) break;
+      await res.body?.cancel().catch(() => undefined);
+      await this.sleep(retryDelayMs(res, attempt));
+    }
 
     const isAuthEndpoint = path.includes('/connexion');
     // Logged-out JSON and page endpoints redirect to `/` rather than answering
