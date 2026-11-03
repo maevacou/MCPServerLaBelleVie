@@ -7,7 +7,7 @@ import { identityFor } from './identity';
 import { LINK_CODE_TTL_SECONDS } from './lbv/config';
 import { LbvApiError, LbvAuthError, LbvNotAuthenticatedError } from './lbv/errors';
 import { createLinkCode } from './links';
-import { cachedRecentOrders, clearOrderCache } from './orderCache';
+import { cachedRecentOrders, cartCache, clearOrderCache } from './orderCache';
 import { withClient } from './runtime';
 import { getSessionStore, sessionKeyFor } from './session';
 
@@ -183,7 +183,7 @@ export function registerTools(server: McpServer): void {
     async (_args, ctx) => {
       const identity = identityOf(ctx);
       return runTool(false, identity, async () => {
-        const cart = await withClient(identity, (c) => c.getCart());
+        const { value: cart } = await cartCache.get(identity, () => withClient(identity, (c) => c.getCart()));
         const lines = cart.lines.map((l) => `• ${l.quantity}× [${l.productId}] ${l.name} — ${euro(l.linePrice)}`).join('\n');
         const text =
           `Cart: ${cart.itemCount} item(s), subtotal ${euro(cart.subtotal)} (to pay ${euro(cart.finalPriceToPay ?? cart.priceToPay)}).\n` +
@@ -207,6 +207,7 @@ export function registerTools(server: McpServer): void {
       const identity = identityOf(ctx);
       return runTool(false, identity, async () => {
         const cart = await withClient(identity, (c) => c.addToCart(productId, quantity ?? 1));
+        await cartCache.put(identity, cart);
         return ok(`Added ${quantity ?? 1}× [${productId}]. Cart now has ${cart.itemCount} item(s), subtotal ${euro(cart.subtotal)}.`, {
           ...cart,
         });
@@ -228,6 +229,7 @@ export function registerTools(server: McpServer): void {
       const identity = identityOf(ctx);
       return runTool(false, identity, async () => {
         const cart = await withClient(identity, (c) => c.removeFromCart(productId, quantity ?? 1));
+        await cartCache.put(identity, cart);
         return ok(`Removed ${quantity ?? 1}× [${productId}]. Cart now has ${cart.itemCount} item(s).`, { ...cart });
       });
     },
@@ -244,6 +246,7 @@ export function registerTools(server: McpServer): void {
       const identity = identityOf(ctx);
       return runTool(false, identity, async () => {
         const cart = await withClient(identity, (c) => c.emptyCart());
+        await cartCache.put(identity, cart);
         return ok(`Cart emptied. ${cart.itemCount} item(s) remain.`, { ...cart });
       });
     },
@@ -377,6 +380,7 @@ export function registerTools(server: McpServer): void {
       const identity = identityOf(ctx);
       return runTool(true, identity, async () => {
         const result = await withClient(identity, (c) => c.reorder(orderId));
+        await cartCache.put(identity, result.cart);
         const text =
           `Reordered order ${orderId}: added ${result.added.length}/${result.requested.length} product(s)` +
           (result.failed.length ? `, ${result.failed.length} failed` : '') +
@@ -632,6 +636,7 @@ export function registerTools(server: McpServer): void {
         const existed = await deleteConnection(identity);
         await getSessionStore().clear(sessionKeyFor(identity));
         await clearOrderCache(identity);
+        await cartCache.clear(identity);
         return ok(
           existed
             ? 'Your La Belle Vie account has been disconnected and its stored credentials deleted.'

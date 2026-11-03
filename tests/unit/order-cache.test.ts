@@ -53,3 +53,28 @@ describe('order list cache', () => {
     expect((await cachedRecentOrders('id-e', async () => [order('e')])).orders).toEqual([order('e')]);
   });
 });
+
+describe('cart cache', () => {
+  beforeEach(() => setSessionStore(null));
+
+  it('reads live, but a slow read that finished late is served to the retry', async () => {
+    const { cartCache, CART_CACHE_FRESH_MS } = await import('../../src/orderCache');
+    let release!: (v: never) => void;
+    const gate = new Promise<never>((r) => { release = r; });
+    const first = cartCache.get('id-cart', () => gate);
+    release({ itemCount: 3 } as never);
+    await first;
+    const live = vi.fn(async () => ({ itemCount: 9 }) as never);
+    expect((await cartCache.get('id-cart', live)).value).toEqual({ itemCount: 3 });
+    expect(live).not.toHaveBeenCalled();
+    // Older than the fresh window: never served stale, read live again.
+    expect((await cartCache.get('id-cart', live, Date.now() + CART_CACHE_FRESH_MS + 1)).value).toEqual({ itemCount: 9 });
+  });
+
+  it('a change made through the tools replaces the cached cart', async () => {
+    const { cartCache } = await import('../../src/orderCache');
+    await cartCache.get('id-cart2', async () => ({ itemCount: 1 }) as never);
+    await cartCache.put('id-cart2', { itemCount: 2 } as never);
+    expect((await cartCache.get('id-cart2', async () => ({ itemCount: 5 }) as never)).value).toEqual({ itemCount: 2 });
+  });
+});
