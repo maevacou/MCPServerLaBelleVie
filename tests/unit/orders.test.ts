@@ -49,21 +49,21 @@ describe('parseOrderProducts', () => {
       { product: { id: 49135, selling_name: 'Banane' }, quantity: 3 },
     ]);
     expect(products).toEqual([
-      { productId: '49135', name: 'Banane', quantity: 3, price: null, unit: null, available: null },
+      { productId: '49135', name: 'Banane', quantity: 3, price: null, unit: null, available: null, picture: null },
     ]);
   });
 
   it('extracts bare product entries and defaults quantity to 1', () => {
     const products = parseOrderProducts([{ id: 7, name: 'Lait' }]);
     expect(products).toEqual([
-      { productId: '7', name: 'Lait', quantity: 1, price: null, unit: null, available: null },
+      { productId: '7', name: 'Lait', quantity: 1, price: null, unit: null, available: null, picture: null },
     ]);
   });
 
   it('skips entries with no resolvable id', () => {
     const products = parseOrderProducts([{ quantity: 2 }, { product_id: 5, quantity: 1 }]);
     expect(products).toEqual([
-      { productId: '5', name: null, quantity: 1, price: null, unit: null, available: null },
+      { productId: '5', name: null, quantity: 1, price: null, unit: null, available: null, picture: null },
     ]);
   });
 
@@ -77,6 +77,7 @@ describe('parseOrderProducts', () => {
       price: 1.99,
       unit: 'La pièce',
       available: true,
+      picture: expect.stringMatching(/^https:\/\//),
     });
     // An empty formatted_selling_unit is reported as "no unit".
     expect(products[1].unit).toBeNull();
@@ -95,6 +96,7 @@ describe('parseOrderProducts', () => {
       price: null,
       unit: null,
       available: false,
+      picture: null,
     });
   });
 });
@@ -165,6 +167,7 @@ describe('parseUsualProductsHtml', () => {
       price: 1.15,
       unit: 'La pièce',
       available: null,
+      picture: 'https://fridg-front.s3.amazonaws.com/media/products/copie-de-fruit-de-la-passion-bio_0msjH6t.jpg',
       category: 'Le primeur',
     });
   });
