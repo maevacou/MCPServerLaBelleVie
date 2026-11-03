@@ -15,6 +15,17 @@ export interface ProductDetail {
    * not (bare rows, HTML pages without an availability marker).
    */
   available: boolean | null;
+  /** Product thumbnail (https URL on the site's CDN), or null when the payload has none. */
+  picture: string | null;
+}
+
+/** First https thumbnail URL the product payload carries. */
+export function pictureOf(p: Record<string, unknown>): string | null {
+  for (const k of ['picture_thumbnail_url', 'picture_thumbnail_big_url', 'picture']) {
+    const v = p[k];
+    if (typeof v === 'string' && /^https:\/\//.test(v)) return v;
+  }
+  return null;
 }
 
 function num(v: unknown): number | null {
@@ -29,8 +40,8 @@ function num(v: unknown): number | null {
  * object carries no stock information at all.
  */
 export function parseProductDetail(product: unknown): ProductDetail {
-  if (product === null) return { price: null, unit: null, available: false };
-  if (typeof product !== 'object') return { price: null, unit: null, available: null };
+  if (product === null) return { price: null, unit: null, available: false, picture: null };
+  if (typeof product !== 'object') return { price: null, unit: null, available: null, picture: null };
   const p = product as Record<string, unknown>;
 
   const label = p.label_unit_notation_listing;
@@ -49,5 +60,5 @@ export function parseProductDetail(product: unknown): ProductDetail {
       p.can_not_be_added_to_an_order_by_the_client !== true;
   }
 
-  return { price: num(p.price), unit, available };
+  return { price: num(p.price), unit, available, picture: pictureOf(p) };
 }

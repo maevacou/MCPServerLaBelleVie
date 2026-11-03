@@ -11,7 +11,7 @@ const base = {
 
 describe('parseProductDetail', () => {
   it('reads price, unit and availability from an in-stock product', () => {
-    expect(parseProductDetail(base)).toEqual({ price: 4.85, unit: 'La pièce', available: true });
+    expect(parseProductDetail(base)).toEqual({ price: 4.85, unit: 'La pièce', available: true, picture: null });
   });
 
   it('is unavailable when the stock is exhausted', () => {
@@ -39,15 +39,16 @@ describe('parseProductDetail', () => {
   });
 
   it('treats a null product as withdrawn from the catalogue', () => {
-    expect(parseProductDetail(null)).toEqual({ price: null, unit: null, available: false });
+    expect(parseProductDetail(null)).toEqual({ price: null, unit: null, available: false, picture: null });
   });
 
   it('reports unknown availability for rows without stock information', () => {
-    expect(parseProductDetail(undefined)).toEqual({ price: null, unit: null, available: null });
+    expect(parseProductDetail(undefined)).toEqual({ price: null, unit: null, available: null, picture: null });
     expect(parseProductDetail({ id: 7, name: 'Lait', price: 1.2 })).toEqual({
       price: 1.2,
       unit: null,
       available: null,
+      picture: null,
     });
   });
 });

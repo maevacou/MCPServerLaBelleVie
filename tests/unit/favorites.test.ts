@@ -68,12 +68,13 @@ describe('parseFavoriteListProducts', () => {
       price: 4.85,
       unit: null,
       available: true,
+      picture: expect.stringMatching(/^https:\/\//),
     });
   });
 
   it('accepts bare rows without an expanded product', () => {
     expect(parseFavoriteListProducts([{ list_id: 1, product_id: 42, quantity: 2 }])).toEqual([
-      { productId: '42', name: null, quantity: 2, price: null, unit: null, available: null },
+      { productId: '42', name: null, quantity: 2, price: null, unit: null, available: null, picture: null },
     ]);
   });
 
@@ -88,6 +89,7 @@ describe('parseFavoriteListProducts', () => {
       price: null,
       unit: null,
       available: false,
+      picture: null,
     });
   });
 });

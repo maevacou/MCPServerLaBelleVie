@@ -213,6 +213,7 @@ function parseProductCard(id: string, block: string, category: string | null): U
     quantity: 1,
     price: price ? Number(price) : null,
     unit: unit ? stripTags(unit) || null : null,
+    picture: /<img\b[^>]*\bsrc=["'](https:\/\/[^"']+)["']/i.exec(block)?.[1] ?? null,
     // The page only lists orderable cards and carries no stock marker.
     available: null,
     category,
