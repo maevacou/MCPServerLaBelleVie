@@ -7,6 +7,7 @@ import { identityFor } from './identity';
 import { LINK_CODE_TTL_SECONDS } from './lbv/config';
 import { LbvApiError, LbvAuthError, LbvNotAuthenticatedError } from './lbv/errors';
 import { createLinkCode } from './links';
+import { cachedRecentOrders, clearOrderCache } from './orderCache';
 import { withClient } from './runtime';
 import { getSessionStore, sessionKeyFor } from './session';
 
@@ -321,7 +322,9 @@ export function registerTools(server: McpServer): void {
     async (_args, ctx) => {
       const identity = identityOf(ctx);
       return runTool(true, identity, async () => {
-        const orders = await withClient(identity, (c) => c.listRecentOrders());
+        const { orders, cachedAt } = await cachedRecentOrders(identity, () =>
+          withClient(identity, (c) => c.listRecentOrders()),
+        );
         const lines = orders
           .map((o) => {
             const count = o.itemCount === null ? '' : ` — ${o.itemCount} product(s)`;
@@ -332,7 +335,8 @@ export function registerTools(server: McpServer): void {
         const hint = orders.length
           ? '\nUse get_order_products <id> to list the items, or reorder <id> to add them all to the basket.'
           : '';
-        return ok(`${orders.length} recent order(s).\n` + (lines || '(none)') + hint, { orders });
+        const asOf = cachedAt ? ` (as of ${new Date(cachedAt).toISOString()})` : '';
+        return ok(`${orders.length} recent order(s)${asOf}.\n` + (lines || '(none)') + hint, { orders, cachedAt });
       });
     },
   );
@@ -627,6 +631,7 @@ export function registerTools(server: McpServer): void {
       return runTool(false, identity, async () => {
         const existed = await deleteConnection(identity);
         await getSessionStore().clear(sessionKeyFor(identity));
+        await clearOrderCache(identity);
         return ok(
           existed
             ? 'Your La Belle Vie account has been disconnected and its stored credentials deleted.'

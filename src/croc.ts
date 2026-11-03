@@ -128,11 +128,12 @@ function withBudget<T>(p: Promise<T>, ms: number): Promise<T> {
 export async function crocPost(req: Request, budgetMs = CROC_TIME_BUDGET_MS): Promise<Response> {
   const headers = corsHeaders(req, crocConfig());
   const started = Date.now();
+  let tool = '?';
   try {
-    return await withBudget(handleCroc(req), budgetMs);
+    return await withBudget(handleCroc(req, (t) => (tool = t)), budgetMs);
   } catch (err) {
     const timeout = err instanceof CrocTimeout;
-    console.error(`[croc] ${timeout ? 'timeout' : 'internal error'} after ${Date.now() - started} ms`, timeout ? '' : err);
+    console.error(`[croc] ${tool} ${timeout ? 'timeout' : 'internal error'} after ${Date.now() - started} ms`, timeout ? '' : err);
     return json(
       timeout
         ? { error: 'timeout', message: 'La Belle Vie a mis trop de temps à répondre.' }
@@ -143,7 +144,7 @@ export async function crocPost(req: Request, budgetMs = CROC_TIME_BUDGET_MS): Pr
   }
 }
 
-async function handleCroc(req: Request): Promise<Response> {
+async function handleCroc(req: Request, onTool: (name: string) => void = () => undefined): Promise<Response> {
   const config = crocConfig();
   const headers = corsHeaders(req, config);
   if (!config) return json({ error: 'not_configured' }, 503, headers);
@@ -159,6 +160,7 @@ async function handleCroc(req: Request): Promise<Response> {
   const name = typeof body?.tool === 'string' ? body.tool : '';
   const householdId = typeof body?.householdId === 'string' ? body.householdId : '';
   if (!UUID.test(householdId)) return json({ error: 'bad_request', message: 'householdId manquant' }, 400, headers);
+  onTool(name);
   const tool = crocTools().get(name);
   if (!tool) return json({ error: 'unknown_tool' }, 404, headers);
 
