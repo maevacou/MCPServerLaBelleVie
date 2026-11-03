@@ -121,3 +121,24 @@ describe('Croc Eat REST bridge', () => {
     expect(body.payload.url).toMatch(/^https:\/\/lbv\.example\/connect\/[A-Za-z0-9_-]{20,}$/);
   });
 });
+
+describe('Croc Eat bridge failure modes', () => {
+  it('answers a slow tool with a CORS-enabled 504 instead of letting Vercel time out', async () => {
+    const { crocPost: post2 } = await import('../../src/croc');
+    process.env.CROC_SUPABASE_URL = SUPA;
+    process.env.CROC_SUPABASE_ANON_KEY = 'anon';
+    process.env.CROC_EAT_ORIGIN = APP;
+    // Supabase answers, then never resolves the membership check: the budget must fire.
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) =>
+      String(input).endsWith('/auth/v1/user') ? Response.json({ id: USER }) : new Promise<Response>(() => {})));
+    const res = await post2(new Request('https://lbv.example/api/croc', {
+      method: 'POST',
+      headers: { origin: APP, authorization: 'Bearer good', 'content-type': 'application/json' },
+      body: JSON.stringify({ tool: 'view_cart', householdId: HH }),
+    }), 30);
+    expect(res.status).toBe(504);
+    expect(res.headers.get('access-control-allow-origin')).toBe(APP);
+    expect((await res.json()).error).toBe('timeout');
+    vi.unstubAllGlobals();
+  });
+});
