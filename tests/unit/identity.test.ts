@@ -11,6 +11,10 @@ describe('identityFor', () => {
     expect(identityFor(auth({ sub: 'U2abc', email: 'a@b.c' }))).toBe('sub:U2abc');
   });
 
+  it('keys Croc Eat callers by household, ahead of any other claim', () => {
+    expect(identityFor(auth({ crocHousehold: 'h1', sub: 'U2abc' }))).toBe('croc-household:h1');
+  });
+
   it('falls back to the email claim, lowercased', () => {
     expect(identityFor(auth({ email: 'Shopper@Example.com' }))).toBe('email:shopper@example.com');
   });

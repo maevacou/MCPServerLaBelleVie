@@ -140,6 +140,16 @@ claude mcp add --transport http labellevie https://<your-app>.vercel.app/mcp \
 }
 ```
 
+## Use it from the Croc Eat app
+
+`POST /api/croc` with `Authorization: Bearer <Supabase access token>` and
+`{ "tool": "view_cart", "arguments": {}, "householdId": "<uuid>" }`. The server checks the token with
+Supabase (`/auth/v1/user`) and the caller's membership of that household (with the caller's own token,
+so Row Level Security decides), then runs the same tool handlers as `/mcp`. Each household shares one
+La Belle Vie connection, linked once through `connect_account` → the usual one-time `/connect` page.
+Answers `{ payload, isError }` (`payload` = structured content, or the text). CORS is limited to
+`CROC_EAT_ORIGIN`.
+
 ## Use it from the CLI
 
 The `lbv` CLI is a thin MCP client — it holds no secrets beyond the bearer token and talks to the same
@@ -214,6 +224,8 @@ Server variables go in the **Vercel project**; `LBV_EMAIL`/`LBV_PASSWORD` live o
 | `DESCOPE_BASE_URL` | Optional Descope regional base URL (default `https://api.descope.com`) |
 | `DESCOPE_MANAGEMENT_KEY` | Local `descope` CLI only — **never** on Vercel, never committed |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Vercel KV — account connections, one-time connect links, cookie jars. **Required in production**. Local `next dev` without KV uses `.lbv-dev-store.json`. |
+| `CROC_SUPABASE_URL`, `CROC_SUPABASE_ANON_KEY` | Croc Eat bridge (`POST /api/croc`): the app's Supabase URL and its **public** anon key, used only to verify the caller's session and household membership. Never the service_role key. |
+| `CROC_EAT_ORIGIN` | Croc Eat bridge: comma-separated allowed browser origins (e.g. `https://croc-eat.vercel.app`). Unset ⇒ the bridge answers 503. |
 | `LBV_MCP_URL` | CLI only — the server URL (default `http://localhost:3000/mcp`) |
 
 See [`.env.example`](./.env.example).
