@@ -108,7 +108,42 @@ export function crocOptions(req: Request): Response {
   return new Response(null, { status: 204, headers: corsHeaders(req, crocConfig()) });
 }
 
-export async function crocPost(req: Request): Promise<Response> {
+/** Budget per call, under the 60 s Vercel limit, so the browser always gets a CORS-enabled answer. */
+export const CROC_TIME_BUDGET_MS = 50_000;
+
+class CrocTimeout extends Error {}
+
+function withBudget<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new CrocTimeout()), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Never let an exception or a slow upstream escape: Vercel's own error pages
+ * carry no CORS headers, so the browser would only see an opaque network error.
+ */
+export async function crocPost(req: Request, budgetMs = CROC_TIME_BUDGET_MS): Promise<Response> {
+  const headers = corsHeaders(req, crocConfig());
+  const started = Date.now();
+  try {
+    return await withBudget(handleCroc(req), budgetMs);
+  } catch (err) {
+    const timeout = err instanceof CrocTimeout;
+    console.error(`[croc] ${timeout ? 'timeout' : 'internal error'} after ${Date.now() - started} ms`, timeout ? '' : err);
+    return json(
+      timeout
+        ? { error: 'timeout', message: 'La Belle Vie a mis trop de temps à répondre.' }
+        : { error: 'internal', message: err instanceof Error ? err.message : String(err) },
+      timeout ? 504 : 500,
+      headers,
+    );
+  }
+}
+
+async function handleCroc(req: Request): Promise<Response> {
   const config = crocConfig();
   const headers = corsHeaders(req, config);
   if (!config) return json({ error: 'not_configured' }, 503, headers);
@@ -140,7 +175,9 @@ export async function crocPost(req: Request): Promise<Response> {
     scopes: ['groceries'],
     extra: { crocHousehold: householdId },
   };
+  const started = Date.now();
   const result = await tool.handler(parsed.data, { http: { authInfo, req } });
+  console.log(`[croc] ${name} ${Date.now() - started} ms${result.isError ? ' (tool error)' : ''}`);
   return json(
     { payload: result.structuredContent ?? textOf(result), isError: Boolean(result.isError) },
     200,
