@@ -13,6 +13,11 @@ export const STATIC_TOKEN_IDENTITY = 'static-token';
 
 export function identityFor(authInfo: AuthInfo | undefined): string {
   const extra = authInfo?.extra;
+  // Croc Eat callers share one La Belle Vie connection per household (set only
+  // by the /api/croc bridge after it has verified the Supabase session and
+  // the caller's membership of that household).
+  const household = extra?.crocHousehold;
+  if (typeof household === 'string' && household.length > 0) return `croc-household:${household}`;
   const sub = extra?.sub;
   if (typeof sub === 'string' && sub.length > 0) return `sub:${sub}`;
   const email = extra?.email;
